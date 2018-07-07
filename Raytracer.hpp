@@ -30,11 +30,11 @@ namespace raytracer{
     {
     private:
         unsigned int height, width;
-        Camera camera;        
+        Camera camera;
+        Material material;
         std::vector<Shape*> shapes;
         std::vector<Light> lights;
-        std::vector<std::string> split(const std::string &str, const char &delimiter);
-        bool readSceneFile(const std::string &file_name);
+        std::vector<std::string> split(const std::string &str, const char &delimiter);        
         bool readObjectFile(const std::string &file_name);
         bool writeToPNG();
         bool writeToPPM(const Vect3F * image);
@@ -45,17 +45,18 @@ namespace raytracer{
         float blend(const float &a, const float &b, const float &mix);
         Vect3F parseCameraVector(const std::vector<std::string> &line_split);
         std::string parseCameraFocalLength(const std::vector<std::string> &line_split);
-        bool parseCameraPlane(const std::vector<std::string> &line_split);
-        Light parseLights(const std::vector<std::string> &line_split);
+        void parseCameraPlane(const std::vector<std::string> &line_split);
+        void parseLights(const std::vector<std::string> &line_split);
         Material parseMaterial(const std::vector<std::string> &line_split);
-        bool parseShapes(const std::vector<std::string> &line_split);
+        void parseShapes(const std::vector<std::string> &line_split, const Material &material);
     public:
         RayTracer():
-        height(640), width(480){}
+        height(480), width(640){}
         RayTracer(const unsigned int &h, const unsigned int &w):
         height(h), width(w){}
         bool renderScene();        
         static bool raytracerTest();
+        bool readSceneFile(const std::string &file_name);
     };
 }
 #endif /* NEWFILE_HPP */

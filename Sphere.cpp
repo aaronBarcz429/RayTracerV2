@@ -19,13 +19,15 @@ namespace raytracer{
     bool Sphere::intersect(const Ray &ray, float &t0, float &t1)
     {
         Vect3F L = ray.getOrigin(), D = ray.getDirection();
-	Vect3F tv = Shape::position - L;
+	Vect3F tv = getPosition() - L;
 	float v = tv.dotProduct(D);
-	if(v < 0)
-		return false;
+	if(v < 0){
+            return false;
+        }            
 	float dsq = tv.dotProduct(tv) - (v*v);
-	if(dsq > radius_squared)
-		return false;
+	if(dsq > radius_squared){
+            return false;
+        }
 	float b = sqrt(radius_squared - dsq);
 	t0 = v - b;
 	t1 = v + b;

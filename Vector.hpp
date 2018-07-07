@@ -47,6 +47,8 @@ namespace raytracer
              */
             Vector(const T &s, const T &t, const T &u):
                     x_cord(s), y_cord(t), z_cord(u){}
+            
+            
             T getX() const { return x_cord; }
             T getY() const { return y_cord; }
             T getZ() const { return z_cord; }

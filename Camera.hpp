@@ -36,15 +36,11 @@ namespace raytracer
             }
             
             Vect3F getW() const {
-                Vect3F w = eye - look_at;
-                w = w.normalize();
-                return w;
+                return (eye - look_at).normalize();
             }
             
             Vect3F getU() const {
-                Vect3F u = up.crossProduct(getW());
-                u = u.normalize();
-                return u;
+                return (up.crossProduct(getW())).normalize();
             }
 
             Vect3F getV() const {
