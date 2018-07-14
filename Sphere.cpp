@@ -33,4 +33,19 @@ namespace raytracer{
 	t1 = v + b;
         return true;
     }
+    
+    bool Sphere::trace(float &t_near, const Ray &ray) {
+        float t0 = INFINITY;
+        float t1 = INFINITY;
+        if (intersect(ray, t0, t1)) {
+            if (t0 < 0) {
+                t0 = t1;
+            }
+            if (t0 < t_near) {
+                t_near = t0;
+                return true;
+            }
+        }
+        return false;
+    }
 }

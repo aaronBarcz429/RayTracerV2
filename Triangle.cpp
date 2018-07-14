@@ -16,14 +16,22 @@ namespace raytracer {
         Vect3F pVect = dir.crossProduct(E2);
         float det = E1.dotProduct(pVect);
         float invDet = 1 / det;
-        if (det < 0.0000001f) return false;
+        if (det < 0.0000000001f) return false;
         Vect3F tVect = ori - A;
         float u = tVect.dotProduct(pVect) * invDet;
-        if (u < 0.0 || u > 1) return false;
+        if (u < 0 || u > 1) return false;
         Vect3F qVect = tVect.crossProduct(E1);
         float v = dir.dotProduct(qVect) * invDet;
-        if (v < 0 || u + v > 1) return false;
+        if (v < 0 || u+v > 1) return false;
         t0 = E2.dotProduct(qVect) * invDet;
         return true;
+    }
+    
+    bool Triangle::trace(float& t_near, const Ray& ray)
+    {
+        if(intersect(ray, t_near, t_near)){
+            return true;
+        }
+        return false;
     }
 }

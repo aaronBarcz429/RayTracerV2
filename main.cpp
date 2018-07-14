@@ -39,6 +39,8 @@ void runTests()
  * 
  */
 int main(int argc, char** argv) {
+    //raytracer::RayTracer ray_tracer = raytracer::RayTracer();
+    //ray_tracer.raytracerTest();
     raytracer::RayTracer ray_tracer = raytracer::RayTracer(std::stoi(argv[2]), std::stoi(argv[3]));
     ray_tracer.readSceneFile(argv[1]);
     ray_tracer.renderScene();

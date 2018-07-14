@@ -10,7 +10,7 @@ namespace raytracer {
      * @return float
      */
     float RayTracer::blend(const float &a, const float &b, const float &mix) {
-        return b * mix + a * (1 - mix);
+        return 
     }
 
     Vect3F RayTracer::refractRay(const Vect3F& W, const Vect3F& pt,
@@ -29,10 +29,12 @@ namespace raytracer {
 
     Ray RayTracer::refractExit(const Vect3F& W, const Vect3F& pt, const float& eta_in, const Shape& shape) {
         Ray refR;
-        Vect3F T1 = refractRay(W, pt, (pt - shape.getPosition()).normalize(), 1.0, eta_in, shape);
+        Vect3F P = pt - shape.getPosition();
+        Vect3F T1 = refractRay(W, pt, P.normalize(), 1.0, eta_in, shape);
         float t1_sum = T1.sum();
         if (t1_sum != 0.0) {
-            Vect3F exit = pt + T1 * 2 * (shape.getPosition() - pt).dotProduct(T1);
+            Vect3F F = shape.getPosition() - pt;
+            Vect3F exit = pt + T1 * 2 * F.dotProduct(T1);
             Vect3F Nin = shape.getPosition() - exit;
             Vect3F T2 = refractRay(T1 * -1, exit, Nin, eta_in, 1.0, shape);
             refR = Ray(exit, T2);
@@ -47,34 +49,27 @@ namespace raytracer {
      * @return Vect3F
      */
     Vect3F RayTracer::draw(const Ray& ray, const int& level) {
-        Vect3F ori = ray.getOrigin();
         Vect3F dir = ray.getDirection();
         float t_near = INFINITY;
         Vect3F pixel_value;
         const Shape *shape = NULL;
         if (!shapes.empty()) {
             for (unsigned i = 0; i < shapes.size(); i++) {
-                float t0 = INFINITY;
-                float t1 = INFINITY;
-                if (shapes[i]->intersect(ray, t0, t1)) {
-                    if (t0 < 0) {
-                        t0 = t1;
-                    }
-                    if (t0 < t_near) {
-                        t_near = t0;
-                        shape = shapes[i];
-                    }
+                if(shapes[i]->trace(t_near, ray)){
+                    shape = shapes[i];
+                    //std::cout << "Shape number: " << (i+1) << std::endl;
                 }
             }
         }
         if (!shape) {
             return Vect3F(0.0);
         }
-        Vect3F ptos = ori + (dir * t_near);
-        Vect3F snorm = (ptos - shape->getPosition()).normalize();
-        float bias = 1.0e-4;
+        Vect3F ptos = shape->setPtoS(ray, t_near);
+        Vect3F snorm = shape->setSNorm(ray, t_near);
+        snorm.normalize();
         for (unsigned int i = 0; i < lights.size(); i++) {
-            Vect3F ptl = (lights[i].getPosition() - ptos).normalize();
+            Vect3F ptl = lights[i].getPosition() - ptos;
+            ptl = ptl.normalize();
             Vect3F eml = lights[i].getColor();
             if (snorm.dotProduct(ptl) > 0) {
                 pixel_value += eml * shape->getMaterial().getDiffusion() * std::max(float(0), snorm.dotProduct(ptl));
@@ -83,19 +78,15 @@ namespace raytracer {
             }
         }
         if (level > 0) {
-            float face_level = dir.dotProduct(snorm);
-            float lense_effect = blend(pow(1 - face_level, 6), 1, 0.2);
-            Vect3F reflect_direction(dir - snorm * 2 * face_level);
-            reflect_direction.normalize();
-            Ray reflect_ray(((ptos + snorm) * bias), reflect_direction);
+            Ray reflect_ray = shape->getReflectRay(ray);
             Vect3F reflection(draw(reflect_ray, level - 1));
             Ray refract_ray = refractExit(dir * -1, ptos, shape->getMaterial().getRefractionIndex(), *shape);
             Vect3F refraction(0.0);
             if (refract_ray.getDirection().sum() && shape->getMaterial().getOpacity().sum()) {
                 refraction = draw(refract_ray, level - 1);
             }
-            pixel_value += (reflection * lense_effect * shape->getMaterial().getReflection()
-                    + refraction * lense_effect * shape->getMaterial().getOpacity())
+            pixel_value += (reflection * shape->getLenseEffect() * shape->getMaterial().getReflection()
+                    + refraction * shape->getLenseEffect() * shape->getMaterial().getOpacity())
                     * shape->getMaterial().getDiffusion();
         }
         return pixel_value;
@@ -118,8 +109,8 @@ namespace raytracer {
     }
 
     bool RayTracer::raytracerTest() {
-        RayTracer ray_tracer = RayTracer(2000, 3000);
-        ray_tracer.readSceneFile("SceneTwo.txt");
+        RayTracer ray_tracer = RayTracer(1000, 2000);
+        ray_tracer.readSceneFile("SceneTorus.txt");
         ray_tracer.renderScene();
         return true;
     }
@@ -203,6 +194,7 @@ namespace raytracer {
     }
 
     bool RayTracer::readSceneFile(const std::string &file_name) {
+        std::string progress_line = "start reading scene";
         std::string line;
         std::ifstream in_file;
         std::vector<std::string> line_split;
@@ -212,10 +204,20 @@ namespace raytracer {
             std::cerr << "Error: file " << file_name << " does not exist." << std::endl;
             return false;
         }
+        std::cout << progress_line;
         while (getline(in_file, line)) {
             line_split = split(line, ' ');
             std::string variable = line_split[0];
             line_count++;
+            // Ignore comments
+            if(variable[0] == '#'){
+                if(line_count > 5){
+                    continue;
+                }else{
+                    line_count -= 1;
+                    continue;
+                }
+            }
             if (variable.compare("eye") == 0 && line_count == 1) {
                 camera.setEye(parseCameraVector(line_split));
                 continue;
@@ -240,19 +242,76 @@ namespace raytracer {
             } else if (variable.compare("sphere") == 0 || variable.compare("triangle") == 0) {
                 parseShapes(line_split, material);
                 continue;
+            } else if (variable.compare("object") == 0){
+                readObjectFile(line_split[1]);
+                continue;
             } else {
                 std::cerr << "File Format Error: variable " << variable <<
                         " is not valid or is in the wrong place.";
                 return false;
             }
+            progress_line += ".";
+            std::cout << progress_line;
         }
-        std::cout << "Finished Reading file..." << std::endl;
-        std::cout << "Number of shapes: " << shapes.size() << std::endl;
+        std::cout << progress_line << "...";
+        std::cout << "done" << std::endl;
+        std::cout << "number of shapes: " << shapes.size() << std::endl;
         in_file.close();
         return true;
     }
 
     bool RayTracer::readObjectFile(const std::string& file_name) {
+        std::string line;
+        std::ifstream in_file;
+        std::vector<std::string> line_split;
+        std::vector<Vect3F> verticies;
+        std::vector<Vect3F> normals;
+        in_file.open(file_name, std::ios::binary | std::ios::in);
+        if (!in_file) {
+            std::cerr << "Error: file " << file_name << " does not exist." << std::endl;
+            return false;
+        }
+        while(getline(in_file, line)){
+            line_split = split(line, ' ');
+            std::string variable = line_split[0];
+            // Ignore comments
+            if(variable[0] == '#'){
+                continue;
+            }
+            if(variable.compare("v") == 0){
+                Vect3F vertex = Vect3F(
+                        std::stof(line_split[1]),
+                        std::stof(line_split[2]),
+                        std::stof(line_split[3]));
+                verticies.push_back(vertex);
+                continue;
+            } else if (variable.compare("vn") == 0){
+                Vect3F normal = Vect3F(
+                        std::stof(line_split[1]),
+                        std::stof(line_split[2]),
+                        std::stof(line_split[3]));
+                normals.push_back(normal);
+            } else if (variable.compare("f") == 0){
+                std::string str = line_split[1];
+                std::string vertex_str = str.substr(0, str.find("//"));
+                int x_index = std::stoi(vertex_str);
+                std::string normal_str = str.substr(str.find("//")+2, str.size());
+                int normal_index = std::stoi(normal_str);
+                str = line_split[2];
+                vertex_str = str.substr(0, str.find("//"));
+                int y_index = std::stoi(vertex_str);
+                str = line_split[3];
+                vertex_str = str.substr(0, str.find("//"));
+                int z_index = std::stoi(vertex_str);
+                Triangle * triangle = new Triangle(
+                        verticies[x_index-1],
+                        verticies[y_index-1],
+                        verticies[z_index-1],
+                        normals[normal_index-1],material);
+                shapes.push_back(triangle);
+            }
+        }
+        in_file.close();
         return true;
     }
 
@@ -268,6 +327,9 @@ namespace raytracer {
             outFile << (unsigned char) (std::min(float(1), image[i].getX()) * 255) <<
                     (unsigned char) (std::min(float(1), image[i].getY()) * 255) <<
                     (unsigned char) (std::min(float(1), image[i].getZ()) * 255);
+            if(i % 1000 == 0){
+                std::cout << "creating file: " << (i / (float) (width * height)) * 100 << "\r";
+            }            
         }
         outFile.close();
         return true;
@@ -293,12 +355,14 @@ namespace raytracer {
                 py = (float) i / ((float)height - 1.0f)*(t - b) + b;
                 px *= aspectRatio;
                 ori = E + (W * -fl) + (U * px) + (V * py);
-                dir = (ori - E).normalize();
+                dir = ori - E;
+                dir = dir.normalize();
                 Ray ray(ori, dir);
-                *pixel = draw(ray, 5);
+                *pixel = draw(ray, 5);                
             }
-            std::cout << "Percent Completed: " << (i / (float) height) * 100 << "\r";
+            std::cout << "rendering: " << (i / (float) height) * 100 << "\r";
         }
+        std::cout << std::endl << "done" << std::endl;
         writeToPPM(image);
         delete [] image;
         return true;
